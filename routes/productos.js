@@ -1,82 +1,96 @@
 import express from 'express';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+import { ObjectId } from 'mongodb';
+import { client } from '../db.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+dotenv.config();
 
 const router = express.Router();
 
-const productosPath = path.join(__dirname, '../productos.json');
-const ventasPath = path.join(__dirname, '../ventas.json');
-
-function leerProductos() {
-    return JSON.parse(fs.readFileSync(productosPath, 'utf-8'));
+function coleccion() {
+    return client.db(process.env.MONGO_DB).collection('productos');
 }
 
-function guardarProductos(productos) {
-    fs.writeFileSync(productosPath, JSON.stringify(productos, null, 2));
-}
-
-router.get('/', (req, res) => {
-    const productos = leerProductos();
-    res.json(productos);
-});
-
-router.get('/:id', (req, res) => {
-    const productos = leerProductos();
-    const producto = productos.find(p => p.id === parseInt(req.params.id));
-    if (!producto) return res.status(404).json({ mensaje: 'Producto no encontrado' });
-    res.json(producto);
-});
-
-router.post('/filtrar', (req, res) => {
-    const { categoria, precioMin, precioMax, disponible } = req.body;
-    let productos = leerProductos();
-
-    if (categoria) productos = productos.filter(p => p.categoria === categoria);
-    if (precioMin !== undefined) productos = productos.filter(p => p.precio >= precioMin);
-    if (precioMax !== undefined) productos = productos.filter(p => p.precio <= precioMax);
-    if (disponible !== undefined) productos = productos.filter(p => p.disponible === disponible);
-
-    res.json(productos);
-});
-
-router.post('/', (req, res) => {
-    const productos = leerProductos();
-    const nuevoId = Math.max(...productos.map(p => p.id)) + 1;
-    const nuevo = { id: nuevoId, ...req.body };
-    productos.push(nuevo);
-    guardarProductos(productos);
-    res.status(201).json(nuevo);
-});
-
-router.put('/:id', (req, res) => {
-    const productos = leerProductos();
-    const index = productos.findIndex(p => p.id === parseInt(req.params.id));
-    if (index === -1) return res.status(404).json({ mensaje: 'Producto no encontrado' });
-    productos[index] = { ...productos[index], ...req.body, id: productos[index].id };
-    guardarProductos(productos);
-    res.json(productos[index]);
-});
-
-router.delete('/:id', (req, res) => {
-    const productos = leerProductos();
-    const ventas = JSON.parse(fs.readFileSync(ventasPath, 'utf-8'));
-
-    const idBuscado = parseInt(req.params.id);
-    const estaEnVentas = ventas.some(v => v.productos.some(p => p.id_producto === idBuscado));
-    if (estaEnVentas) {
-        return res.status(409).json({ mensaje: 'No se puede eliminar el producto porque está asociado a una o más ventas' });
+router.get('/', async (req, res) => {
+    try {
+        const productos = await coleccion().find().toArray();
+        res.json(productos);
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al obtener productos', error: error.message });
     }
+});
 
-    const index = productos.findIndex(p => p.id === idBuscado);
-    if (index === -1) return res.status(404).json({ mensaje: 'Producto no encontrado' });
+router.get('/:id', async (req, res) => {
+    try {
+        const producto = await coleccion().findOne({ _id: new ObjectId(req.params.id) });
+        if (!producto) return res.status(404).json({ mensaje: 'Producto no encontrado' });
+        res.json(producto);
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al obtener producto', error: error.message });
+    }
+});
 
-    const eliminado = productos.splice(index, 1)[0];
-    guardarProductos(productos);
-    res.json({ mensaje: 'Producto eliminado', producto: eliminado });
+router.post('/filtrar', async (req, res) => {
+    try {
+        const { categoria, precioMin, precioMax, disponible } = req.body;
+        const filtro = {};
+
+        if (categoria) filtro.categoria = categoria;
+        if (disponible !== undefined) filtro.disponible = disponible;
+        if (precioMin !== undefined || precioMax !== undefined) {
+            filtro.precio = {};
+            if (precioMin !== undefined) filtro.precio.$gte = precioMin;
+            if (precioMax !== undefined) filtro.precio.$lte = precioMax;
+        }
+
+        const productos = await coleccion().find(filtro).toArray();
+        res.json(productos);
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al filtrar productos', error: error.message });
+    }
+});
+
+router.post('/', async (req, res) => {
+    try {
+        const resultado = await coleccion().insertOne(req.body);
+        res.status(201).json({ _id: resultado.insertedId, ...req.body });
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al crear producto', error: error.message });
+    }
+});
+
+router.put('/:id', async (req, res) => {
+    try {
+        const resultado = await coleccion().findOneAndUpdate(
+            { _id: new ObjectId(req.params.id) },
+            { $set: req.body },
+            { returnDocument: 'after' }
+        );
+        if (!resultado) return res.status(404).json({ mensaje: 'Producto no encontrado' });
+        res.json(resultado);
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al actualizar producto', error: error.message });
+    }
+});
+
+router.delete('/:id', async (req, res) => {
+    try {
+        const _id = new ObjectId(req.params.id);
+
+        const estaEnVentas = await client.db(process.env.MONGO_DB)
+            .collection('ventas')
+            .findOne({ 'productos.id_producto': _id });
+
+        if (estaEnVentas) {
+            return res.status(409).json({ mensaje: 'No se puede eliminar el producto porque está asociado a una o más ventas' });
+        }
+
+        const resultado = await coleccion().findOneAndDelete({ _id });
+        if (!resultado) return res.status(404).json({ mensaje: 'Producto no encontrado' });
+        res.json({ mensaje: 'Producto eliminado', producto: resultado });
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al eliminar producto', error: error.message });
+    }
 });
 
 export default router;

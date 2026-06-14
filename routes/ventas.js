@@ -1,62 +1,86 @@
 import express from 'express';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+import { ObjectId } from 'mongodb';
+import { client } from '../db.js';
+import { verificarToken } from '../middleware/auth.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+dotenv.config();
 
 const router = express.Router();
 
-const ventasPath = path.join(__dirname, '../ventas.json');
-
-function leerVentas() {
-    return JSON.parse(fs.readFileSync(ventasPath, 'utf-8'));
+function coleccion() {
+    return client.db(process.env.MONGO_DB).collection('ventas');
 }
 
-function guardarVentas(ventas) {
-    fs.writeFileSync(ventasPath, JSON.stringify(ventas, null, 2));
-}
-
-router.get('/', (req, res) => {
-    const ventas = leerVentas();
-    res.json(ventas);
+router.get('/', async (req, res) => {
+    try {
+        const ventas = await coleccion().find().toArray();
+        res.json(ventas);
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al obtener ventas', error: error.message });
+    }
 });
 
-router.get('/:id', (req, res) => {
-    const ventas = leerVentas();
-    const venta = ventas.find(v => v.id === parseInt(req.params.id));
-    if (!venta) return res.status(404).json({ mensaje: 'Venta no encontrada' });
-    res.json(venta);
+router.get('/:id', async (req, res) => {
+    try {
+        const venta = await coleccion().findOne({ _id: new ObjectId(req.params.id) });
+        if (!venta) return res.status(404).json({ mensaje: 'Venta no encontrada' });
+        res.json(venta);
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al obtener venta', error: error.message });
+    }
 });
 
-router.post('/usuario', (req, res) => {
-    const { id_usuario } = req.body;
-    if (!id_usuario) return res.status(400).json({ mensaje: 'El campo id_usuario es requerido' });
+router.post('/usuario', async (req, res) => {
+    try {
+        const { id_usuario } = req.body;
+        if (!id_usuario) return res.status(400).json({ mensaje: 'El campo id_usuario es requerido' });
 
-    const ventas = leerVentas();
-    const ventasDelUsuario = ventas.filter(v => v.id_usuario === id_usuario);
-    if (ventasDelUsuario.length === 0) return res.status(404).json({ mensaje: 'No se encontraron ventas para ese usuario' });
+        const ventas = await coleccion().find({ id_usuario: id_usuario.toString() }).toArray();
+        if (ventas.length === 0) return res.status(404).json({ mensaje: 'No se encontraron ventas para ese usuario' });
 
-    res.json(ventasDelUsuario);
+        res.json(ventas);
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al obtener ventas del usuario', error: error.message });
+    }
 });
 
-router.post('/', (req, res) => {
-    const ventas = leerVentas();
-    const nuevoId = Math.max(...ventas.map(v => v.id)) + 1;
-    const nueva = { id: nuevoId, fecha: new Date().toISOString(), ...req.body };
-    ventas.push(nueva);
-    guardarVentas(ventas);
-    res.status(201).json(nueva);
+router.post('/', verificarToken, async (req, res) => {
+    try {
+        const nueva = {
+            ...req.body,
+            id_usuario: req.usuario.id,
+            fecha: new Date().toISOString()
+        };
+        const resultado = await coleccion().insertOne(nueva);
+        res.status(201).json({ _id: resultado.insertedId, ...nueva });
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al crear venta', error: error.message });
+    }
 });
 
-router.put('/:id', (req, res) => {
-    const ventas = leerVentas();
-    const index = ventas.findIndex(v => v.id === parseInt(req.params.id));
-    if (index === -1) return res.status(404).json({ mensaje: 'Venta no encontrada' });
-    ventas[index] = { ...ventas[index], ...req.body, id: ventas[index].id };
-    guardarVentas(ventas);
-    res.json(ventas[index]);
+router.put('/:id', verificarToken, async (req, res) => {
+    try {
+        const resultado = await coleccion().findOneAndUpdate(
+            { _id: new ObjectId(req.params.id) },
+            { $set: req.body },
+            { returnDocument: 'after' }
+        );
+        if (!resultado) return res.status(404).json({ mensaje: 'Venta no encontrada' });
+        res.json(resultado);
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al actualizar venta', error: error.message });
+    }
+});
+
+router.delete('/:id', verificarToken, async (req, res) => {
+    try {
+        const resultado = await coleccion().findOneAndDelete({ _id: new ObjectId(req.params.id) });
+        if (!resultado) return res.status(404).json({ mensaje: 'Venta no encontrada' });
+        res.json({ mensaje: 'Venta eliminada', venta: resultado });
+    } catch (error) {
+        res.status(500).json({ mensaje: 'Error al eliminar venta', error: error.message });
+    }
 });
 
 export default router;
