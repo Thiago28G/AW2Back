@@ -57,7 +57,7 @@ router.post('/login', async (req, res) => {
             { expiresIn: '1h' }
         );
 
-        res.cookie('token', token, { httpOnly: true, secure: false, sameSite: 'strict' });
+        res.cookie('token', token, { httpOnly: true, secure: false, sameSite: 'lax' });
         res.json({ mensaje: 'Login exitoso', usuario: { id: usuario._id, nombre: usuario.nombre, email: usuario.email } });
     } catch (error) {
         res.status(500).json({ mensaje: 'Error en el login', error: error.message });

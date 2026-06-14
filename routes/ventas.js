@@ -47,6 +47,18 @@ router.post('/usuario', async (req, res) => {
 
 router.post('/', verificarToken, async (req, res) => {
     try {
+        const productosCol = client.db(process.env.MONGO_DB).collection('productos');
+
+        for (const item of req.body.productos) {
+            const producto = await productosCol.findOne({ id: item.id_producto });
+            if (!producto) return res.status(404).json({ mensaje: `Producto no encontrado: ${item.id_producto}` });
+            if (producto.stock < item.cantidad) return res.status(409).json({ mensaje: `Stock insuficiente para: ${producto.nombre}` });
+        }
+
+        for (const item of req.body.productos) {
+            await productosCol.updateOne({ id: item.id_producto }, { $inc: { stock: -item.cantidad } });
+        }
+
         const nueva = {
             ...req.body,
             id_usuario: req.usuario.id,

@@ -27,9 +27,9 @@
     "desc": "Teclado mecánico gaming TKL, switches Red, retroiluminación RGB, estructura metálica resistente",
     "precio": 39500.00,
     "imagen": "redragon-k552.jpg",
-    "stock": 0,
+    "stock": 5,
     "categoria": "Periféricos",
-    "disponible": false,
+    "disponible": true,
     "destacado": false
   },
   {
