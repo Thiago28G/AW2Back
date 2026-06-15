@@ -4,5 +4,3 @@ node_modules/
 # Directorio de dependencias generadas por npm
 package-lock.json
 
-# Variables de entorno
-.env
