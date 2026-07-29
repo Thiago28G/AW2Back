@@ -17,7 +17,7 @@ const productoSchema = new mongoose.Schema(
       type: String,
       required: [true, 'La categoría es obligatoria'],
       enum: {
-        values: ['Periféricos', 'Notebooks', 'Monitores', 'Componentes', 'Accesorios'],
+        values: ['Computadoras', 'Periféricos', 'Monitores', 'Audio', 'Almacenamiento'],
         message: '{VALUE} no es una categoría válida',
       },
     },
@@ -39,6 +39,10 @@ const productoSchema = new mongoose.Schema(
     imagen: {
       type: String,
       default: '',
+    },
+    destacado: {
+      type: Boolean,
+      default: false,
     },
   },
   { timestamps: true }

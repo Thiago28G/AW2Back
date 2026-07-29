@@ -1,39 +1,47 @@
-import dotenv from 'dotenv';
-dotenv.config();
+import 'dotenv/config';
 
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
-import { conectarDB } from './db.js';
-import productosRouter from './routes/productos.js';
-import usuariosRouter from './routes/usuarios.js';
-import ventasRouter from './routes/ventas.js';
+import conectarDB from './config/db.js';
+import usuariosRouter from './routes/usuarios.routes.js';
+import productosRouter from './routes/productos.routes.js';
+import ventasRouter from './routes/ventas.routes.js';
+import { notFound, errorHandler } from './middleware/errorHandler.js';
 
 const app = express();
-const PORT = process.env.PORT || 3000;
 
-app.use(cors({
-    origin: ['http://localhost:5500', 'http://127.0.0.1:5500'],
-    credentials: true
-}));
+app.set('trust proxy', 1);
+
+const origenesPermitidos = [
+  'http://localhost:5500',
+  'http://127.0.0.1:5500',
+  'http://localhost:5501',
+  'http://127.0.0.1:5501',
+  process.env.FRONTEND_URL,
+].filter(Boolean);
+
+app.use(cors({ origin: origenesPermitidos, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
 
-app.use('/api/productos', productosRouter);
+app.get('/api/health', (req, res) => res.json({ ok: true, ts: new Date() }));
+
 app.use('/api/usuarios', usuariosRouter);
+app.use('/api/productos', productosRouter);
 app.use('/api/ventas', ventasRouter);
 
-async function iniciar() {
-    try {
-        await conectarDB();
-        console.log('Conectado a MongoDB');
-        app.listen(PORT, () => {
-            console.log(`Servidor corriendo en http://localhost:${PORT}`);
-        });
-    } catch (error) {
-        console.error('Error al conectar a MongoDB:', error);
-        process.exit(1);
-    }
-}
+app.use(notFound);
+app.use(errorHandler);
+
+const iniciar = async () => {
+  await conectarDB();
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => console.log(`Servidor escuchando en el puerto ${PORT}`));
+};
 
 iniciar();
+
+process.on('unhandledRejection', (err) => {
+  console.error('Rechazo no manejado:', err);
+});
