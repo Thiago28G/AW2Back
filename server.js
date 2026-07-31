@@ -27,6 +27,19 @@ app.use(cookieParser());
 
 app.get('/api/health', (req, res) => res.json({ ok: true, ts: new Date() }));
 
+app.get('/', (req, res) => res.json({
+  nombre: 'TechStore API',
+  descripcion: 'API REST para la gestión de usuarios, productos y ventas de TechStore.',
+  estado: 'operativa',
+  documentacion: 'https://github.com/Thiago28G/AW2Back',
+  endpoints: {
+    usuarios: '/api/usuarios',
+    productos: '/api/productos',
+    ventas: '/api/ventas',
+    health: '/api/health',
+  },
+}));
+
 app.use('/api/usuarios', usuariosRouter);
 app.use('/api/productos', productosRouter);
 app.use('/api/ventas', ventasRouter);
