@@ -197,8 +197,6 @@ La base se puede resetear en cualquier momento con `npm run seed`.
 | lucas@techstore.com | Lucas1234 | usuario |
 | ana@techstore.com | Ana12345 | usuario |
 
-> Estos datos son de demostración. No usar contraseñas similares en producción.
-
 ---
 
 ## Nota sobre cold start en Render
